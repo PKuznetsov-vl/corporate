@@ -467,8 +467,10 @@ def get_vertex_name_by_presence(company_inn: str) -> str:
         # if in the component, then we will start the crawl from the RIGHT lobe
         return company_inn + 'R'
 
-
+status=0
 def get_equity_share(company_inn: str) :
+    global status
+    status=1
     st_time = time.monotonic()
     queue_vertices.clear()
     final_owners.clear()
@@ -517,6 +519,7 @@ def get_equity_share(company_inn: str) :
         print(f'{owner_counter}. {owner[0]} = {(owner[1] * 100 * (1.0 / s)):.4f}%')
         owner_counter += 1
     print(f"The total amount of ownership share is equal to {(s * 100 * (1.0 / s)):.9}%")
+    status=0
     return list_owners
 
 
@@ -561,6 +564,13 @@ def key_err(error):
     return make_response(jsonify({'error': 'Without owners'}), 401)
 
 
+@app.route('/status', methods=['GET'])
+def get_stats():
+    global status
+    if status == 0:
+        return {'status': 'nothing todo'}
+    else :
+        return {'status': 'calculating'}
 
 
 @app.route('/tst/<int:inn>', methods=['GET'])
@@ -575,7 +585,7 @@ def get_tasks(inn):
     set_terminality_to_table(requested_company)
 
     result_lst = get_equity_share(requested_company)
-    return {'Company':'inn',
+    return {'Company':inn,
         'Owner': int(result_lst[0][0]),
             'OwnerShipPercentage': int(result_lst[0][1])}
             # }
