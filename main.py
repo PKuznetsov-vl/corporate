@@ -480,7 +480,7 @@ def get_equity_share(company_inn: str) -> bool:
             owner_info_dict[0] = company_info_dict[0] * cur_equity_share
             if (owner_info_dict[len(owner_info_dict) - 1] == "T"):
                 s += owner_info_dict[0]
-                print(s)
+
                 cur_owner = get_vertex_without_RL(cur_owner)
                 if (cur_owner in final_owners):
                     # if we considered the path to this vertex, then we sum it up with the current weight
@@ -496,7 +496,8 @@ def get_equity_share(company_inn: str) -> bool:
     list_owners.reverse()
     owner_counter = 1
     print(f"Ownership share in the company {company_inn}:")
-    print(list_owners)
+    print(list_owners[0][0])
+    print(s)
     for owner in list_owners:
         print(f'{owner_counter}. {owner[0]} = {(owner[1] * 100 * (1.0 / s)):.4f}%')
         owner_counter += 1

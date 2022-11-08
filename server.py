@@ -558,7 +558,7 @@ def not_found(error):
 
 @app.errorhandler(Exception)
 def key_err(error):
-    return make_response(jsonify({'error': 'Without owners'}), 201)
+    return make_response(jsonify({'error': 'Without owners'}), 401)
 
 
 
@@ -574,9 +574,11 @@ def get_tasks(inn):
 
     set_terminality_to_table(requested_company)
 
-    reult_lst = get_equity_share(requested_company)
-    return {'Owner': reult_lst[0][0],
-              'ownershipP':reult_lst[0][0] * 100 * (1.0 / 0)  }
+    result_lst = get_equity_share(requested_company)
+    return {'Company':'inn',
+        'Owner': int(result_lst[0][0]),
+            'OwnerShipPercentage': int(result_lst[0][1])}
+            # }
 
 #
 # @app.route('/todo/api/v1.0/tasks/<int:task_id>', methods=['GET'])
