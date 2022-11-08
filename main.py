@@ -25,8 +25,8 @@ data = pd.read_csv(path, usecols={'founder_inn', 'inn', 'capital_p'},
 
 # data.shape
 
-data = data.rename(columns={"founder_inn": "organisation_inn",
-                            'inn': 'participant_id',
+data = data.rename(columns={'founder_inn': 'participant_id',
+                            'inn': 'organisation_inn',
                             'capital_p': 'equity_share'})
 data = data[(data['equity_share'] > 0) &
             (data.participant_id != data.organisation_inn)]
