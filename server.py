@@ -29,12 +29,6 @@ app.config['MYSQL_DATABASE_DB'] = 'app'
 app.config['MYSQL_DATABASE_HOST'] = 'localhost'
 mysql.init_app(app)
 
-
-
-
-
-
-
 SH_MODE = 1  # only SH nodes are considered final holders
 LEVELS = 20  # this parameter should be equal or exceed the number of "onion layers" in data. 20 is a bit of overkill for safety
 
@@ -42,7 +36,7 @@ LEVELS = 20  # this parameter should be equal or exceed the number of "onion lay
 @app.before_first_request
 def _declare_df():
     print('Waite 20 secs while server is loading')
-    path = './founder_sort.csv'
+    path = '/new/founder_sort.csv'
     global data
     data = pd.read_csv(path, usecols={'founder_inn', 'inn', 'capital_p'},
                        dtype={'founder_inn': str, 'inn': str, 'capital_p': float})
@@ -57,7 +51,7 @@ def _declare_df():
 
     gdata = data.groupby('organisation_inn').sum().reset_index()
     dict_companies = dict(gdata.values)
-    # todo redone
+
     data['equity_share'] = data['equity_share'] / np.array([dict_companies[num] for num in data['organisation_inn']])
 
     data['super_holder'] = ~pd.Series(data.participant_id).isin(data.organisation_inn)
@@ -338,7 +332,7 @@ def set_suitable_vertices(company_inn: str) -> bool:
     if (len(data[data['organisation_inn'] == company_inn]) == 0 and not stack_vertices):
         print("Without owners")
 
-       # abort(Exception)
+        # abort(Exception)
         return False
 
     while (True):
@@ -500,7 +494,7 @@ def get_equity_share(company_inn: str):
             print("Couldn't find the entered company")
             if company_inn in data.participant_id.values:
                 print('Found Person')
-                return 'p',[],find_dec(data, company_inn)
+                return 'p', [], find_dec(data, company_inn)
             else:
                 abort(Exception)
                 return False
@@ -539,7 +533,7 @@ def get_equity_share(company_inn: str):
     dec = find_dec(df_f=data, inn=company_inn)
     print(dec)
     print(f"The total amount of ownership share is equal to {(s * 100 * (1.0 / s)):.9}%")
-    return 'c',out_lst, dec
+    return 'c', out_lst, dec
 
 
 # get_equity_share(requested_company)
@@ -552,7 +546,7 @@ def find_dec(df_f, inn):
     # inn =503802414742 # 10000246917 5038107129 7606080127
     df = df_f.loc[df_f['participant_id'] == inn]
     df = df.drop_duplicates('organisation_inn')
-    df.equity_share=df.equity_share.apply(   lambda x:x*100)
+    df.equity_share = df.equity_share.apply(lambda x: x * 100)
     print(df.equity_share)
     if not df.empty:
         # писправить apply
@@ -606,6 +600,7 @@ def key_err(error):
 
 @app.route('/status', methods=['GET'])
 def get_stats():
+
     global status
     if status == 0:
         return {'status': 'nothing todo'}
@@ -613,11 +608,14 @@ def get_stats():
         return {'status': 'calculating'}
 
 
-@app.route('/tst/<int:inn>', methods=['GET'])
+@app.route('/inn', methods=['POST'])
 # @auth.login_required
-def get_tasks(inn):
-    if inn == 0:
-        abort(404)
+def get_tasks():
+    shift = request.json
+    inn = shift['entity']['inn']
+    id = shift['entity']['id']
+    # if inn == 0:
+    #     abort(404)
     conn = mysql.connect()
     cursor = conn.cursor()
     requested_company = str(inn)
@@ -625,28 +623,29 @@ def get_tasks(inn):
 
     set_terminality_to_table(requested_company)
 
-    lit,out_lst, dec = get_equity_share(requested_company)
+    lit, out_lst, dec = get_equity_share(requested_company)
 
-    if lit=='c':
+    if lit == 'c':
         acc = ';'.join(out_lst)
         cursor.execute(
-            f'UPDATE mod3_entities SET ascs = "{acc}", descs = "{str(dec[0])}" WHERE inn = {inn}')
-        return {'Company': inn,
-            'acc': out_lst,
-            'dec': dec}
+            f'UPDATE mod3_entities SET ascs = "{acc}", descs = "{str(dec[0])}" WHERE id = {id}')
+        conn.commit()
+        conn.close()
+        return {'Person': inn,
+                'id': id,
+                'Staus:': 'done'}
     else:
         cursor.execute(
-            f'UPDATE mod3_entities SET ascs = "1", descs = "1" WHERE inn = 352806209266')
-        #cursor.fetchone()
+            f'UPDATE mod3_entities SET ascs = "0", descs = "{str(dec[0])}" WHERE id = {id}')
+        # cursor.fetchone()
         conn.commit()
         conn.close()
         # cursor.execute("SELECT * FROM mod3_entities WHERE inn = 352806209266 ORDER BY id DESC LIMIT 1")
         # data = cursor.fetchone()
         print(data)
         return {'Person': inn,
-                'acc:': 0,
-                'dec': dec[0]}
-    # }
+                'id': id,
+                'Staus:': 'done'}
 
 
 #
