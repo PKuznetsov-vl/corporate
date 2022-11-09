@@ -12,8 +12,7 @@ queue_vertices = deque()
 final_owners = dict()
 all_vertices_in_components_of_strong_connectivity = []
 T_list = []
-data_core_graph= []
-
+data_core_graph = []
 
 SH_MODE = 1  # only SH nodes are considered final holders
 LEVELS = 20  # this parameter should be equal or exceed the number of "onion layers" in data. 20 is a bit of overkill for safety
@@ -202,8 +201,6 @@ def warm_up():
     data_core_graph.insert(2, "serial_number", 0)
     print(data_core_graph)
 
-
-
     double_edges = {}
 
     i = 0
@@ -234,9 +231,6 @@ def warm_up():
         table_of_edges.append((get_serial_number_by_vertice(data_core_graph.index[i]),
                                get_serial_number_by_vertice(data_core_graph['organisation_inn'][i])))
     print('Total edges: ', len(table_of_edges))
-
-
-
 
     for component in tarjan(from_edges(table_of_edges)):
         if (len(component) < 2):
@@ -289,16 +283,17 @@ def warm_up():
 
             T_list.append([component_vertices, T_current])
 
+
 warm_up()
 additional_graph = data.copy(deep=True)
 additional_graph.rename(columns={'super_holder': 'terminality'}, inplace=True)
 additional_graph = additional_graph.drop(columns=['super_target'], axis=1)
 additional_graph = additional_graph.set_index('organisation_inn')
 
-
 suitable_vertices = dict()
 stack_vertices = []
 used_ancestors = set()
+
 
 def find_Z_by_company_inn(company_inn):
     for i in range(len(T_list)):
@@ -451,7 +446,8 @@ def get_vertex_name_by_presence(company_inn: str) -> str:
         return company_inn + 'R'
 
 
-def get_equity_share(company_inn: str) -> bool:
+def get_equity_share(company_inn: str):
+    out_lst = []
     st_time = time.monotonic()
     queue_vertices.clear()
     final_owners.clear()
@@ -466,8 +462,11 @@ def get_equity_share(company_inn: str) -> bool:
 
         if (company_info_dict == None):
             print("Couldn't find the entered company")
-            return False
+            if company_inn in data['participant_id']:
 
+                return find_dec(data, company_inn)
+            else:
+                return False
 
         for i in range(1, len(company_info_dict) - 1):
             cur_owner = company_info_dict[i][0]
@@ -498,17 +497,39 @@ def get_equity_share(company_inn: str) -> bool:
     print(f"Ownership share in the company {company_inn}:")
     print(list_owners[0][0])
     print(s)
+
     for owner in list_owners:
         print(f'{owner_counter}. {owner[0]} = {(owner[1] * 100 * (1.0 / s)):.4f}%')
         owner_counter += 1
+        out_lst.append(f'{owner[0]}:{(owner[1] * 100 * (1.0 / s)):.4f}')
+    dec = find_dec(df_f=data, inn=company_inn)
+    print(dec)
     print(f"The total amount of ownership share is equal to {(s * 100 * (1.0 / s)):.9}%")
-    return True
+    return out_lst, dec
+
 
 # get_equity_share(requested_company)
 
 
-requested_company = "4104002024"
+def find_dec(df_f, inn):
+    columns = ['inn', 'childrens']
+
+    df_fin = pd.DataFrame(columns=columns)
+    # inn =503802414742 # 10000246917 5038107129 7606080127
+    df = df_f.loc[df_f['participant_id'] == inn]
+    df = df.drop_duplicates('organisation_inn')
+    print(df.head(30))
+    if not df.empty:
+        # писправить apply
+        df['mg_coll'] = df.loc[:, ('organisation_inn', 'equity_share')].astype(str).apply(':'.join, axis=1)
+        df_fin['childrens'] = df.groupby('participant_id').mg_coll.apply(
+            lambda x: ';'.join(list(map(str, x))))
+
+    return df_fin['childrens']._values.tolist()
+
+
+requested_company = '352806209266'  # "503802414742" 352806209266 2304071215
 set_suitable_vertices(requested_company)
 set_additional_vertex()
 set_terminality_to_table(requested_company)
-get_equity_share(requested_company)
+print(get_equity_share(requested_company))

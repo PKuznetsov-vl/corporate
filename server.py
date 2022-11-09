@@ -20,13 +20,11 @@ queue_vertices = deque()
 final_owners = dict()
 all_vertices_in_components_of_strong_connectivity = []
 T_list = []
-data_core_graph= []
+data_core_graph = []
 app = Flask(__name__, static_url_path="")
 
 SH_MODE = 1  # only SH nodes are considered final holders
 LEVELS = 20  # this parameter should be equal or exceed the number of "onion layers" in data. 20 is a bit of overkill for safety
-
-
 
 
 @app.before_first_request
@@ -39,20 +37,19 @@ def _declare_df():
 
     # data.shape
 
-    data = data.rename(columns={"founder_inn": "organisation_inn",
-                                'inn': 'participant_id',
+    data = data.rename(columns={'founder_inn': 'participant_id',
+                                'inn': 'organisation_inn',
                                 'capital_p': 'equity_share'})
     data = data[(data['equity_share'] > 0) &
                 (data.participant_id != data.organisation_inn)]
 
     gdata = data.groupby('organisation_inn').sum().reset_index()
     dict_companies = dict(gdata.values)
-    #todo redone
+    # todo redone
     data['equity_share'] = data['equity_share'] / np.array([dict_companies[num] for num in data['organisation_inn']])
 
     data['super_holder'] = ~pd.Series(data.participant_id).isin(data.organisation_inn)
     data['super_target'] = ~pd.Series(data.organisation_inn).isin(data.participant_id)
-
 
 
 def get_serial_number_by_vertice(v):
@@ -218,8 +215,6 @@ def warm_up():
     data_core_graph.insert(2, "serial_number", 0)
     print(data_core_graph)
 
-
-
     double_edges = {}
 
     i = 0
@@ -250,9 +245,6 @@ def warm_up():
         table_of_edges.append((get_serial_number_by_vertice(data_core_graph.index[i]),
                                get_serial_number_by_vertice(data_core_graph['organisation_inn'][i])))
     print('Total edges: ', len(table_of_edges))
-
-
-
 
     for component in tarjan(from_edges(table_of_edges)):
         if (len(component) < 2):
@@ -305,11 +297,14 @@ def warm_up():
 
             T_list.append([component_vertices, T_current])
     print('Server started')
-#warm_up()
+
+
+# warm_up()
 
 suitable_vertices = dict()
 stack_vertices = []
 used_ancestors = set()
+
 
 def find_Z_by_company_inn(company_inn):
     for i in range(len(T_list)):
@@ -330,7 +325,8 @@ def set_suitable_vertices(company_inn: str) -> bool:
     used_ancestors.clear()
     if (len(data[data['organisation_inn'] == company_inn]) == 0 and not stack_vertices):
         print("Without owners")
-        abort(Exception)
+
+       # abort(Exception)
         return False
 
     while (True):
@@ -467,10 +463,14 @@ def get_vertex_name_by_presence(company_inn: str) -> str:
         # if in the component, then we will start the crawl from the RIGHT lobe
         return company_inn + 'R'
 
-status=0
-def get_equity_share(company_inn: str) :
+
+status = 0
+
+
+def get_equity_share(company_inn: str):
+    out_lst = []
     global status
-    status=1
+    status = 1
     st_time = time.monotonic()
     queue_vertices.clear()
     final_owners.clear()
@@ -479,7 +479,7 @@ def get_equity_share(company_inn: str) :
     while (queue_vertices):
         if (time.monotonic() - st_time > 60.0):
             print("Вычисление конечных владельцев более 60 секунд...")
-            #abort(TimeoutError)
+            # abort(TimeoutError)
             return False
         cur_company = queue_vertices.pop()
         company_info_dict = suitable_vertices.get(cur_company)
@@ -487,7 +487,6 @@ def get_equity_share(company_inn: str) :
         if (company_info_dict == None):
             print("Couldn't find the entered company")
             return False
-
 
         for i in range(1, len(company_info_dict) - 1):
             cur_owner = company_info_dict[i][0]
@@ -515,14 +514,35 @@ def get_equity_share(company_inn: str) :
     list_owners.reverse()
     owner_counter = 1
     print(f"Ownership share in the company {company_inn}:")
+
     for owner in list_owners:
         print(f'{owner_counter}. {owner[0]} = {(owner[1] * 100 * (1.0 / s)):.4f}%')
         owner_counter += 1
+        out_lst.append(f'{owner[0]}:{(owner[1] * 100 * (1.0 / s)):.4f}')
+    dec = find_dec(df_f=data, inn=company_inn)
+    print(dec)
     print(f"The total amount of ownership share is equal to {(s * 100 * (1.0 / s)):.9}%")
-    status=0
-    return list_owners
+    return out_lst, dec
 
 
+# get_equity_share(requested_company)
+
+
+def find_dec(df_f, inn):
+    columns = ['inn', 'childrens']
+
+    df_fin = pd.DataFrame(columns=columns)
+    # inn =503802414742 # 10000246917 5038107129 7606080127
+    df = df_f.loc[df_f['participant_id'] == inn]
+    df = df.drop_duplicates('organisation_inn')
+    print(df.head(30))
+    if not df.empty:
+        # писправить apply
+        df['mg_coll'] = df.loc[:, ('organisation_inn', 'equity_share')].astype(str).apply(':'.join, axis=1)
+        df_fin['childrens'] = df.groupby('participant_id').mg_coll.apply(
+            lambda x: ';'.join(list(map(str, x))))
+
+    return df_fin['childrens']._values.tolist()
 
 
 # auth = HTTPBasicAuth()
@@ -559,9 +579,10 @@ def bad_request(error):
 def not_found(error):
     return make_response(jsonify({'error': 'Not found'}), 404)
 
+
 @app.errorhandler(Exception)
 def key_err(error):
-    return make_response(jsonify({'error': 'Without owners'}), 401)
+    return make_response(jsonify({'error': "Could not find the entered company"}), 401)
 
 
 @app.route('/status', methods=['GET'])
@@ -569,7 +590,7 @@ def get_stats():
     global status
     if status == 0:
         return {'status': 'nothing todo'}
-    else :
+    else:
         return {'status': 'calculating'}
 
 
@@ -584,11 +605,12 @@ def get_tasks(inn):
 
     set_terminality_to_table(requested_company)
 
-    result_lst = get_equity_share(requested_company)
-    return {'Company':inn,
-        'Owner': int(result_lst[0][0]),
-            'OwnerShipPercentage': int(result_lst[0][1])}
-            # }
+    out_lst, dec = get_equity_share(requested_company)
+    return {'Company': inn,
+            'Owner:OwnerShipPercentage': out_lst,
+            'dec': dec}
+    # }
+
 
 #
 # @app.route('/todo/api/v1.0/tasks/<int:task_id>', methods=['GET'])
