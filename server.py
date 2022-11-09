@@ -4,7 +4,7 @@ import time
 import math
 import time
 from http.client import HTTPException
-
+from flaskext.mysql import MySQL
 import pandas as pd
 import numpy as np
 import gc
@@ -22,6 +22,18 @@ all_vertices_in_components_of_strong_connectivity = []
 T_list = []
 data_core_graph = []
 app = Flask(__name__, static_url_path="")
+mysql = MySQL()
+app.config['MYSQL_DATABASE_USER'] = 'app'
+app.config['MYSQL_DATABASE_PASSWORD'] = 'vPUjBWyxKqThlwB39JQg0To3IugXajMj'
+app.config['MYSQL_DATABASE_DB'] = 'app'
+app.config['MYSQL_DATABASE_HOST'] = 'localhost'
+mysql.init_app(app)
+
+
+
+
+
+
 
 SH_MODE = 1  # only SH nodes are considered final holders
 LEVELS = 20  # this parameter should be equal or exceed the number of "onion layers" in data. 20 is a bit of overkill for safety
@@ -477,8 +489,8 @@ def get_equity_share(company_inn: str):
     queue_vertices.append(get_vertex_name_by_presence(company_inn))
     s = 0
     while (queue_vertices):
-        if (time.monotonic() - st_time > 60.0):
-            print("Вычисление конечных владельцев более 60 секунд...")
+        if (time.monotonic() - st_time > 120.0):
+            print("Вычисление конечных владельцев более 120 секунд...")
             # abort(TimeoutError)
             return False
         cur_company = queue_vertices.pop()
@@ -488,7 +500,7 @@ def get_equity_share(company_inn: str):
             print("Couldn't find the entered company")
             if company_inn in data.participant_id.values:
                 print('Found Person')
-                return 'p',find_dec(data, company_inn)
+                return 'p',[],find_dec(data, company_inn)
             else:
                 abort(Exception)
                 return False
@@ -606,16 +618,34 @@ def get_stats():
 def get_tasks(inn):
     if inn == 0:
         abort(404)
-
+    conn = mysql.connect()
+    cursor = conn.cursor()
     requested_company = str(inn)
     set_suitable_vertices(requested_company)
 
     set_terminality_to_table(requested_company)
 
-    out_lst, dec = get_equity_share(requested_company)
-    return {'Company': inn,
-            'Owner:OwnerShipPercentage': out_lst,
+    lit,out_lst, dec = get_equity_share(requested_company)
+
+    if lit=='c':
+        acc = ';'.join(out_lst)
+        cursor.execute(
+            f'UPDATE mod3_entities SET ascs = "{acc}", descs = "{str(dec[0])}" WHERE inn = {inn}')
+        return {'Company': inn,
+            'acc': out_lst,
             'dec': dec}
+    else:
+        cursor.execute(
+            f'UPDATE mod3_entities SET ascs = "1", descs = "1" WHERE inn = 352806209266')
+        #cursor.fetchone()
+        conn.commit()
+        conn.close()
+        # cursor.execute("SELECT * FROM mod3_entities WHERE inn = 352806209266 ORDER BY id DESC LIMIT 1")
+        # data = cursor.fetchone()
+        print(data)
+        return {'Person': inn,
+                'acc:': 0,
+                'dec': dec[0]}
     # }
 
 

@@ -534,7 +534,7 @@ def find_dec(df_f, inn):
     # inn =503802414742 # 10000246917 5038107129 7606080127
     df = df_f.loc[df_f['participant_id'] == inn]
     df = df.drop_duplicates('organisation_inn')
-    df.equity_share=df.equity_share.apply(   lambda x:x*100)
+    df.equity_share=df.equity_share.apply(   lambda x:x*100).apply( lambda x: round(x, 2))
     print(df.equity_share)
     if not df.empty:
         # писправить apply
