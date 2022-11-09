@@ -462,8 +462,8 @@ def get_equity_share(company_inn: str):
 
         if (company_info_dict == None):
             print("Couldn't find the entered company")
-            if company_inn in data['participant_id']:
-
+            if company_inn in data.participant_id.values:
+                print('Found Person')
                 return find_dec(data, company_inn)
             else:
                 return False
@@ -510,6 +510,22 @@ def get_equity_share(company_inn: str):
 
 # get_equity_share(requested_company)
 
+# def find_dec_c(df_f, inn):
+#     columns = ['inn', 'childrens']
+#
+#     df_fin = pd.DataFrame(columns=columns)
+#     # inn =503802414742 # 10000246917 5038107129 7606080127
+#     df = df_f.loc[df_f['participant_id'] == inn]
+#     df = df.drop_duplicates('organisation_inn')
+#     print(df.equity_share)
+#     if not df.empty:
+#         # писправить apply
+#         df['mg_coll'] = df.loc[:, ('organisation_inn', 'equity_share')].astype(str).apply(':'.join, axis=1)
+#
+#         df_fin['childrens'] = df.groupby('participant_id').mg_coll.apply(
+#             lambda x: ';'.join(list(map(str, x))))
+#
+#     return df_fin['childrens']._values.tolist()
 
 def find_dec(df_f, inn):
     columns = ['inn', 'childrens']
@@ -518,17 +534,22 @@ def find_dec(df_f, inn):
     # inn =503802414742 # 10000246917 5038107129 7606080127
     df = df_f.loc[df_f['participant_id'] == inn]
     df = df.drop_duplicates('organisation_inn')
-    print(df.head(30))
+    df.equity_share=df.equity_share.apply(   lambda x:x*100)
+    print(df.equity_share)
     if not df.empty:
         # писправить apply
         df['mg_coll'] = df.loc[:, ('organisation_inn', 'equity_share')].astype(str).apply(':'.join, axis=1)
+
         df_fin['childrens'] = df.groupby('participant_id').mg_coll.apply(
             lambda x: ';'.join(list(map(str, x))))
 
     return df_fin['childrens']._values.tolist()
 
 
-requested_company = '352806209266'  # "503802414742" 352806209266 2304071215
+
+
+
+requested_company = '503802414742'  # "503802414742" 352806209266 2304071215
 set_suitable_vertices(requested_company)
 set_additional_vertex()
 set_terminality_to_table(requested_company)

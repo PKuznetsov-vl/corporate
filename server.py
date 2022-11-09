@@ -486,7 +486,12 @@ def get_equity_share(company_inn: str):
 
         if (company_info_dict == None):
             print("Couldn't find the entered company")
-            return False
+            if company_inn in data.participant_id.values:
+                print('Found Person')
+                return 'p',find_dec(data, company_inn)
+            else:
+                abort(Exception)
+                return False
 
         for i in range(1, len(company_info_dict) - 1):
             cur_owner = company_info_dict[i][0]
@@ -522,7 +527,7 @@ def get_equity_share(company_inn: str):
     dec = find_dec(df_f=data, inn=company_inn)
     print(dec)
     print(f"The total amount of ownership share is equal to {(s * 100 * (1.0 / s)):.9}%")
-    return out_lst, dec
+    return 'c',out_lst, dec
 
 
 # get_equity_share(requested_company)
@@ -535,10 +540,12 @@ def find_dec(df_f, inn):
     # inn =503802414742 # 10000246917 5038107129 7606080127
     df = df_f.loc[df_f['participant_id'] == inn]
     df = df.drop_duplicates('organisation_inn')
-    print(df.head(30))
+    df.equity_share=df.equity_share.apply(   lambda x:x*100)
+    print(df.equity_share)
     if not df.empty:
         # писправить apply
         df['mg_coll'] = df.loc[:, ('organisation_inn', 'equity_share')].astype(str).apply(':'.join, axis=1)
+
         df_fin['childrens'] = df.groupby('participant_id').mg_coll.apply(
             lambda x: ';'.join(list(map(str, x))))
 
