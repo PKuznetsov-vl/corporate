@@ -10,6 +10,7 @@ from collections import deque
 
 queue_vertices = deque()
 final_owners = dict()
+intermediaries_owners = dict()
 all_vertices_in_components_of_strong_connectivity = []
 T_list = []
 data_core_graph = []
@@ -451,6 +452,8 @@ def get_equity_share(company_inn: str):
     st_time = time.monotonic()
     queue_vertices.clear()
     final_owners.clear()
+    intermediaries_owners.clear()
+    used_vertices = set()
     queue_vertices.append(get_vertex_name_by_presence(company_inn))
     s = 0
     while (queue_vertices):
@@ -488,23 +491,42 @@ def get_equity_share(company_inn: str):
                     # if you met for the first time, then we set the ownership share
                     final_owners[cur_owner] = owner_info_dict[0]
             else:
-                queue_vertices.append(cur_owner)
+                cur_owner = get_vertex_without_RL(cur_owner)
+                if (cur_owner in intermediaries_owners):
+                    # if we considered the path to this vertex, then we sum it up with the current weight
+                    intermediaries_owners.update({cur_owner: owner_info_dict[0] + intermediaries_owners.get(cur_owner)})
+                else:
+                    # if you met for the first time, then we set the ownership share
+                    intermediaries_owners[cur_owner] = owner_info_dict[0]
+                if(cur_owner not in used_vertices):
+                    queue_vertices.append(cur_owner)
+                    used_vertices.add(cur_owner)
     # presentation from the most important owners to the smaller ones
-    list_owners = list(final_owners.items())
-    list_owners.sort(key=lambda i: i[1])
-    list_owners.reverse()
+    list_final_owners = list(final_owners.items())
+    list_intermediaries_owners = list(intermediaries_owners.items())
+    list_final_owners.sort(key=lambda i: i[1])
+    list_final_owners.reverse()
+    list_intermediaries_owners.sort(key=lambda i: i[1])
+    list_intermediaries_owners.reverse()
     owner_counter = 1
     print(f"Ownership share in the company {company_inn}:")
-    print(list_owners[0][0])
-    print(s)
-
-    for owner in list_owners:
-        print(f'{owner_counter}. {owner[0]} = {(owner[1] * 100 * (1.0 / s)):.4f}%')
+    norm_coef = 1 / s # какой-нибудь try catch при s = 0
+    
+    print("Final owners:")
+    for owner in list_final_owners:
+        print(f'{owner_counter}. {owner[0]} = {(owner[1] * norm_coef * 100):.4f}%')
         owner_counter += 1
-        out_lst.append(f'{owner[0]}:{(owner[1] * 100 * (1.0 / s)):.4f}')
+        out_lst.append(f'{owner[0]}:{(owner[1] * norm_coef * 100):.4f}')
+    
+    print("Intermediaries owners:")
+    owner_counter = 1
+    for owner in list_intermediaries_owners:
+        print(f'{owner_counter}. {owner[0]} = {(owner[1] * norm_coef * 100):.4f}%')
+        owner_counter += 1
+        out_lst.append(f'{owner[0]}:{(owner[1] * norm_coef * 100):.4f}')
     dec = find_dec(df_f=data, inn=company_inn)
     print(dec)
-    print(f"The total amount of ownership share is equal to {(s * 100 * (1.0 / s)):.9}%")
+    print(f"The total amount of final ownership share is equal to {(s * 100 * norm_coef):.6}%")
     return out_lst, dec
 
 
@@ -519,7 +541,7 @@ def get_equity_share(company_inn: str):
 #     df = df.drop_duplicates('organisation_inn')
 #     print(df.equity_share)
 #     if not df.empty:
-#         # писправить apply
+#         # исправить apply
 #         df['mg_coll'] = df.loc[:, ('organisation_inn', 'equity_share')].astype(str).apply(':'.join, axis=1)
 #
 #         df_fin['childrens'] = df.groupby('participant_id').mg_coll.apply(
@@ -537,7 +559,7 @@ def find_dec(df_f, inn):
     df.equity_share=df.equity_share.apply(   lambda x:x*100).apply( lambda x: round(x, 2))
     print(df.equity_share)
     if not df.empty:
-        # писправить apply
+        # исправить apply
         df['mg_coll'] = df.loc[:, ('organisation_inn', 'equity_share')].astype(str).apply(':'.join, axis=1)
 
         df_fin['childrens'] = df.groupby('participant_id').mg_coll.apply(
@@ -549,7 +571,7 @@ def find_dec(df_f, inn):
 
 
 
-requested_company = '503802414742'  # "503802414742" 352806209266 2304071215
+requested_company = '7728493587'  # "503802414742" 352806209266 2304071215
 set_suitable_vertices(requested_company)
 set_additional_vertex()
 set_terminality_to_table(requested_company)
