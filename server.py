@@ -549,40 +549,41 @@ def get_equity_share(company_inn: str):
     for owner in list_final_owners:
         print(f'{owner_counter}. {owner[0]} = {(owner[1] * norm_coef * 100):.4f}%')
         owner_counter += 1
-        final_owners_lst.append(f'{owner[0]}:{(owner[1] * norm_coef * 100):.4f}')
+        final_owners_lst.append([owner[0], round(owner[1] * norm_coef * 100, 2)])
 
     print("Intermediaries owners:")
     owner_counter = 1
     for owner in list_intermediaries_owners:
         print(f'{owner_counter}. {owner[0]} = {(owner[1] * norm_coef * 100):.4f}%')
         owner_counter += 1
-        intermediaries_owners_lst.append(f'{owner[0]}:{(owner[1] * norm_coef * 100):.4f}')
+        intermediaries_owners_lst.append([owner[0], round(owner[1] * norm_coef * 100, 2)])
     dec = find_dec(df_f=data, inn=company_inn)
+    print('dec_old', dec)
+    # new_dec=[]
+    for el in dec:
+        el[1] = round(el[1] * 100, 2)
+    # new_dec.append((el[0],round( el[1] * norm_coef * 100,2)))
+    #dec1 = find_dec(df_f=data_orig, inn=company_inn)
     print('dec', dec)
+    #print('dec1 ', dec1)
     print(f"The total amount of final ownership share is equal to {(s * 100 * norm_coef):.6}%")
-    # return [], [], find_dec(data, company_inn), find_dec(data_orig, company_inn)
-    return final_owners_lst, find_par(data_orig, company_inn), dec, find_dec(data_orig, company_inn)
+    #return final_owners_lst, intermediaries_owners_lst, dec
+    return final_owners_lst, find_par(data_orig, company_inn), dec, \
+           find_dec(data_orig, company_inn),intermediaries_owners_lst
 
 
 def find_dec(df_f, inn):
     columns = ['inn', 'childrens']
 
-    # df_fin = pd.DataFrame(columns=columns)
+    df_fin = pd.DataFrame(columns=columns)
     # inn =503802414742 # 10000246917 5038107129 7606080127
     df = df_f.loc[df_f['participant_id'] == inn]
     df = df.drop_duplicates('organisation_inn')
-    df.equity_share = df.equity_share.apply(lambda x: x * 100)
-    print(df.equity_share)
+    #df.equity_share=df.equity_share.apply(   lambda x:x*100).apply( lambda x: round(x, 2))
+    print(df.head())
     if not df.empty:
-        # писправить apply
-        df['mg_coll'] = df.loc[:, ('organisation_inn', 'equity_share')].astype(str).apply(':'.join, axis=1)
-
-        childrens_lst = df.groupby('participant_id').mg_coll.apply(
-            lambda x: ';'.join(list(map(str, x))))._values.tolist()
-        return childrens_lst
-    else:
-        return []
-
+        return list(map(list,zip(df.organisation_inn, df.equity_share)))
+    else: return []
 
 def find_par(df_f, inn):
     columns = ['inn', 'parents']
@@ -591,19 +592,12 @@ def find_par(df_f, inn):
     # inn =503802414742 # 10000246917 5038107129 7606080127
     df = df_f.loc[df_f['organisation_inn'] == inn]
     df = df.drop_duplicates('participant_id')
-    df.equity_share = df.equity_share.apply(lambda x: x * 100)
-    print(df.equity_share)
+    #df.equity_share = df.equity_share.apply(lambda x: x * 100)
+    #print(df.equity_share)
     if not df.empty:
-        # писправить apply
-        df['mg_coll'] = df.loc[:, ('participant_id', 'equity_share')].astype(str).apply(':'.join, axis=1)
-
-        parents = df.groupby('organisation_inn').mg_coll.apply(
-            lambda x: ';'.join(list(map(str, x))))._values.tolist()
-
-        return parents
+        return  list(map(list,zip(df.participant_id, df.equity_share)))
     else:
         return []
-
 
 @app.errorhandler(400)
 def bad_request(error):
@@ -685,12 +679,14 @@ def get_corp():
     requested_company = str(inn)
     set_suitable_vertices(requested_company)
     set_terminality_to_table(requested_company)
-    final_owners_lst, parents_lst, dec, childrens = get_equity_share(requested_company)
+    final_owners_lst, parents_lst, dec, childrens,intermediaries_owners_lst\
+        = get_equity_share(requested_company)
     return jsonify(
         ascendents=final_owners_lst,
         parents=parents_lst,
         descendents=dec,
-        childrens=childrens
+        childrens=childrens,
+        intermediaries_owners=intermediaries_owners_lst
     )
 
 
