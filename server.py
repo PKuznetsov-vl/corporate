@@ -501,8 +501,8 @@ def get_equity_share(company_inn: str):
                 # todo original data
                 return [], [], find_dec(data, company_inn), find_dec(data_orig, company_inn)
             else:
-                abort(Exception)
-                return False
+                raise NameError(company_inn)
+                #return False
 
         for i in range(1, len(company_info_dict) - 1):
             cur_owner = company_info_dict[i][0]
@@ -599,7 +599,7 @@ def find_par(df_f, inn):
     else:
         return []
 
-@app.errorhandler(400)
+@app.errorhandler(Exception)
 def bad_request(error):
     return make_response(jsonify({'error': 'Bad request'}), 400)
 
@@ -609,9 +609,9 @@ def not_found(error):
     return make_response(jsonify({'error': 'Not found'}), 404)
 
 
-@app.errorhandler(Exception)
+@app.errorhandler(NameError)
 def key_err(error):
-    return make_response(jsonify({'error': "Could not find the entered company"}), 401)
+    return make_response(jsonify({'error': f"Could not find the entered company or person {error}"}), 401)
 
 
 @app.route('/status', methods=['GET'])
@@ -621,6 +621,18 @@ def get_stats():
         return {'status': 'nothing todo'}
     else:
         return {'status': 'calculating'}
+
+
+def get_name_db(inn):
+    try:
+        conn = mysql.connect()
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT name FROM mod3_entities WHERE inn = {inn} ORDER BY id DESC LIMIT 1")
+        data = cursor.fetchone()
+        return data[0]
+
+    except:
+      return ''
 
 
 @app.route('/inn', methods=['POST'])
@@ -681,6 +693,12 @@ def get_corp():
     set_terminality_to_table(requested_company)
     final_owners_lst, parents_lst, dec, childrens,intermediaries_owners_lst\
         = get_equity_share(requested_company)
+    final_owners_lst=[{'inn':el[0],'ownership_p':el[1],'name':get_name_db(el[0])} for el in final_owners_lst]
+    parents_lst = [{'inn': el[0], 'ownership_p': el[1], 'name': get_name_db(el[0])} for el in parents_lst]
+    dec = [{'inn': el[0], 'ownership_p': el[1], 'name': get_name_db(el[0])} for el in dec]
+    childrens = [{'inn': el[0], 'ownership_p': el[1], 'name': get_name_db(el[0])} for el in childrens]
+    intermediaries_owners_lst = [{'inn': el[0], 'ownership_p': el[1], 'name': get_name_db(el[0])}
+                                 for el in intermediaries_owners_lst]
     return jsonify(
         ascendents=final_owners_lst,
         parents=parents_lst,
