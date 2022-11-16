@@ -499,10 +499,11 @@ def get_equity_share(company_inn: str):
             if company_inn in data.participant_id.values:
                 print('Found Person')
                 # todo original data
-                return [], [], find_dec(data, company_inn), find_dec(data_orig, company_inn)
+                #final_owners_lst, parents_lst, dec, childrens, intermediaries_owners_lst
+                return [], [], find_dec(data, company_inn), find_dec(data_orig, company_inn),[]
             else:
                 raise NameError(company_inn)
-                #return False
+                return False
 
         for i in range(1, len(company_info_dict) - 1):
             cur_owner = company_info_dict[i][0]
@@ -700,7 +701,7 @@ def get_corp():
     intermediaries_owners_lst = [{'inn': el[0], 'ownership_p': el[1], 'name': get_name_db(el[0])}
                                  for el in intermediaries_owners_lst]
     return jsonify(
-        ascendents=final_owners_lst,
+        ascendants=final_owners_lst,
         parents=parents_lst,
         descendents=dec,
         childrens=childrens,
