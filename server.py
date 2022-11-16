@@ -2,16 +2,16 @@
 import time
 import math
 import time
-#from http.client import HTTPException
+# from http.client import HTTPException
 from flaskext.mysql import MySQL
 import pandas as pd
 import numpy as np
-#import gc
-#from numpy import linalg as LA
-#from collections import defaultdict
+# import gc
+# from numpy import linalg as LA
+# from collections import defaultdict
 from flask import Flask, jsonify, abort, request, make_response, url_for
-#from flask_httpauth import HTTPBasicAuth
-#from pyparsing import unicode
+# from flask_httpauth import HTTPBasicAuth
+# from pyparsing import unicode
 from collections import defaultdict
 from collections import deque
 
@@ -35,7 +35,7 @@ LEVELS = 20  # this parameter should be equal or exceed the number of "onion lay
 @app.before_first_request
 def _declare_df():
     print('Waite 20 secs while server is loading')
-    path = '/new/founder_sort.csv'
+    path = './founder_sort.csv'
     global data
     data = pd.read_csv(path, usecols={'founder_inn', 'inn', 'capital_p'},
                        dtype={'founder_inn': str, 'inn': str, 'capital_p': float})
@@ -45,8 +45,10 @@ def _declare_df():
     data = data.rename(columns={'founder_inn': 'participant_id',
                                 'inn': 'organisation_inn',
                                 'capital_p': 'equity_share'})
-    data = data[(data['equity_share'] > 0) &
+    data = data[(data['equity_share'] > 0) &  # mb where or loc
                 (data.participant_id != data.organisation_inn)]
+    global data_orig
+    data_orig = data.copy()
 
     gdata = data.groupby('organisation_inn').sum().reset_index()
     dict_companies = dict(gdata.values)
@@ -471,21 +473,24 @@ def get_vertex_name_by_presence(company_inn: str) -> str:
 
 status = 0
 
+final_owners = dict()
+intermediaries_owners = dict()
+
 
 def get_equity_share(company_inn: str):
-    out_lst = []
-    global status
-    status = 1
+    final_owners_lst = []
+    intermediaries_owners_lst = []
     st_time = time.monotonic()
     queue_vertices.clear()
     final_owners.clear()
+    intermediaries_owners.clear()
+    used_vertices = set()
     queue_vertices.append(get_vertex_name_by_presence(company_inn))
     s = 0
     while (queue_vertices):
-        if (time.monotonic() - st_time > 120.0):
-            print("Вычисление конечных владельцев более 120 секунд...")
-            # abort(TimeoutError)
-            return False
+        if (time.monotonic() - st_time > 60.0):
+            print("Вычисление конечных владельцев более 60 секунд...")
+            # return False
         cur_company = queue_vertices.pop()
         company_info_dict = suitable_vertices.get(cur_company)
 
@@ -493,7 +498,8 @@ def get_equity_share(company_inn: str):
             print("Couldn't find the entered company")
             if company_inn in data.participant_id.values:
                 print('Found Person')
-                return 'p', [], find_dec(data, company_inn)
+                # todo original data
+                return [], [], find_dec(data, company_inn), find_dec(data_orig, company_inn)
             else:
                 abort(Exception)
                 return False
@@ -509,6 +515,7 @@ def get_equity_share(company_inn: str):
             owner_info_dict[0] = company_info_dict[0] * cur_equity_share
             if (owner_info_dict[len(owner_info_dict) - 1] == "T"):
                 s += owner_info_dict[0]
+
                 cur_owner = get_vertex_without_RL(cur_owner)
                 if (cur_owner in final_owners):
                     # if we considered the path to this vertex, then we sum it up with the current weight
@@ -517,31 +524,50 @@ def get_equity_share(company_inn: str):
                     # if you met for the first time, then we set the ownership share
                     final_owners[cur_owner] = owner_info_dict[0]
             else:
-                queue_vertices.append(cur_owner)
+                cur_owner = get_vertex_without_RL(cur_owner)
+                if (cur_owner in intermediaries_owners):
+                    # if we considered the path to this vertex, then we sum it up with the current weight
+                    intermediaries_owners.update({cur_owner: owner_info_dict[0] + intermediaries_owners.get(cur_owner)})
+                else:
+                    # if you met for the first time, then we set the ownership share
+                    intermediaries_owners[cur_owner] = owner_info_dict[0]
+                if (cur_owner not in used_vertices):
+                    queue_vertices.append(cur_owner)
+                    used_vertices.add(cur_owner)
     # presentation from the most important owners to the smaller ones
-    list_owners = list(final_owners.items())
-    list_owners.sort(key=lambda i: i[1])
-    list_owners.reverse()
+    list_final_owners = list(final_owners.items())
+    list_intermediaries_owners = list(intermediaries_owners.items())
+    list_final_owners.sort(key=lambda i: i[1])
+    list_final_owners.reverse()
+    list_intermediaries_owners.sort(key=lambda i: i[1])
+    list_intermediaries_owners.reverse()
     owner_counter = 1
     print(f"Ownership share in the company {company_inn}:")
+    norm_coef = 1 / s  # какой-нибудь try catch при s = 0
 
-    for owner in list_owners:
-        print(f'{owner_counter}. {owner[0]} = {(owner[1] * 100 * (1.0 / s)):.4f}%')
+    print("Final owners:")
+    for owner in list_final_owners:
+        print(f'{owner_counter}. {owner[0]} = {(owner[1] * norm_coef * 100):.4f}%')
         owner_counter += 1
-        out_lst.append(f'{owner[0]}:{(owner[1] * 100 * (1.0 / s)):.4f}')
+        final_owners_lst.append(f'{owner[0]}:{(owner[1] * norm_coef * 100):.4f}')
+
+    print("Intermediaries owners:")
+    owner_counter = 1
+    for owner in list_intermediaries_owners:
+        print(f'{owner_counter}. {owner[0]} = {(owner[1] * norm_coef * 100):.4f}%')
+        owner_counter += 1
+        intermediaries_owners_lst.append(f'{owner[0]}:{(owner[1] * norm_coef * 100):.4f}')
     dec = find_dec(df_f=data, inn=company_inn)
-    print(dec)
-    print(f"The total amount of ownership share is equal to {(s * 100 * (1.0 / s)):.9}%")
-    return 'c', out_lst, dec
-
-
-# get_equity_share(requested_company)
+    print('dec', dec)
+    print(f"The total amount of final ownership share is equal to {(s * 100 * norm_coef):.6}%")
+    # return [], [], find_dec(data, company_inn), find_dec(data_orig, company_inn)
+    return final_owners_lst, find_par(data_orig, company_inn), dec, find_dec(data_orig, company_inn)
 
 
 def find_dec(df_f, inn):
     columns = ['inn', 'childrens']
 
-    df_fin = pd.DataFrame(columns=columns)
+    # df_fin = pd.DataFrame(columns=columns)
     # inn =503802414742 # 10000246917 5038107129 7606080127
     df = df_f.loc[df_f['participant_id'] == inn]
     df = df.drop_duplicates('organisation_inn')
@@ -551,37 +577,34 @@ def find_dec(df_f, inn):
         # писправить apply
         df['mg_coll'] = df.loc[:, ('organisation_inn', 'equity_share')].astype(str).apply(':'.join, axis=1)
 
-        df_fin['childrens'] = df.groupby('participant_id').mg_coll.apply(
-            lambda x: ';'.join(list(map(str, x))))
-
-    return df_fin['childrens']._values.tolist()
-
-
-# auth = HTTPBasicAuth()
-#
-#
-# @auth.get_password
-# def get_password(username):
-#     if username == 'miguel':
-#         return 'python'
-#     return None
-#
-#
-# @auth.error_handler
-# def unauthorized():
-#     return make_response(jsonify({'error': 'Unauthorized access'}), 403)
-#     # return 403 instead of 401 to prevent browsers from displaying the default auth dialog
-#
-#
-# @app.errorhandler(402)
-# def bad_request(error):
-#     return make_response(jsonify({'error': 'Without owners'}), 402)
+        childrens_lst = df.groupby('participant_id').mg_coll.apply(
+            lambda x: ';'.join(list(map(str, x))))._values.tolist()
+        return childrens_lst
+    else:
+        return []
 
 
-# @app.errorhandler(TimeoutError)
-# def bad_request(error):
-#     return make_response(jsonify({'error': 'Long calc time'}), 203)
-#
+def find_par(df_f, inn):
+    columns = ['inn', 'parents']
+
+    df_fin = pd.DataFrame(columns=columns)
+    # inn =503802414742 # 10000246917 5038107129 7606080127
+    df = df_f.loc[df_f['organisation_inn'] == inn]
+    df = df.drop_duplicates('participant_id')
+    df.equity_share = df.equity_share.apply(lambda x: x * 100)
+    print(df.equity_share)
+    if not df.empty:
+        # писправить apply
+        df['mg_coll'] = df.loc[:, ('participant_id', 'equity_share')].astype(str).apply(':'.join, axis=1)
+
+        parents = df.groupby('organisation_inn').mg_coll.apply(
+            lambda x: ';'.join(list(map(str, x))))._values.tolist()
+
+        return parents
+    else:
+        return []
+
+
 @app.errorhandler(400)
 def bad_request(error):
     return make_response(jsonify({'error': 'Bad request'}), 400)
@@ -599,7 +622,6 @@ def key_err(error):
 
 @app.route('/status', methods=['GET'])
 def get_stats():
-
     global status
     if status == 0:
         return {'status': 'nothing todo'}
@@ -611,12 +633,17 @@ def get_stats():
 # @auth.login_required
 def get_tasks():
     shift = request.json
-    inn = shift['entity']['inn']
-    id = shift['entity']['id']
+    print(shift)
+    print(request)
+    inn = shift['inn']
+    id = shift['id']
     # if inn == 0:
     #     abort(404)
-    conn = mysql.connect()
-    cursor = conn.cursor()
+    try:
+        conn = mysql.connect()
+        cursor = conn.cursor()
+    except:
+        print('No conn to db')
     requested_company = str(inn)
     set_suitable_vertices(requested_company)
 
@@ -647,6 +674,26 @@ def get_tasks():
                 'Staus:': 'done'}
 
 
+@app.route('/get_corp', methods=['GET'])
+# @auth.login_required
+def get_corp():
+    inn = request.args.get('inn')
+    print(inn)
+    if len(inn) == 0:
+        abort(400)
+
+    requested_company = str(inn)
+    set_suitable_vertices(requested_company)
+    set_terminality_to_table(requested_company)
+    final_owners_lst, parents_lst, dec, childrens = get_equity_share(requested_company)
+    return jsonify(
+        ascendents=final_owners_lst,
+        parents=parents_lst,
+        descendents=dec,
+        childrens=childrens
+    )
+
+
 #
 # @app.route('/todo/api/v1.0/tasks/<int:task_id>', methods=['GET'])
 # # @auth.login_required
@@ -673,4 +720,4 @@ def get_tasks():
 
 
 if __name__ == '__main__':
-    app.run(debug=False,port=3000)
+    app.run(debug=True, port=3000)

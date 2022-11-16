@@ -31,6 +31,7 @@ data = data.rename(columns={'founder_inn': 'participant_id',
 data = data[(data['equity_share'] > 0) &
             (data.participant_id != data.organisation_inn)]
 data.head()
+data_orig=data.copy()
 gdata = data.groupby('organisation_inn').sum().reset_index()
 dict_companies = dict(gdata.values)
 data['equity_share'] = data['equity_share'] / np.array([dict_companies[num] for num in data['organisation_inn']])
@@ -448,7 +449,8 @@ def get_vertex_name_by_presence(company_inn: str) -> str:
 
 
 def get_equity_share(company_inn: str):
-    out_lst = []
+    final_owners_lst = []
+    intermediaries_owners_lst=[]
     st_time = time.monotonic()
     queue_vertices.clear()
     final_owners.clear()
@@ -516,18 +518,18 @@ def get_equity_share(company_inn: str):
     for owner in list_final_owners:
         print(f'{owner_counter}. {owner[0]} = {(owner[1] * norm_coef * 100):.4f}%')
         owner_counter += 1
-        out_lst.append(f'{owner[0]}:{(owner[1] * norm_coef * 100):.4f}')
+        final_owners_lst.append(f'{owner[0]}:{(owner[1] * norm_coef * 100):.4f}')
     
     print("Intermediaries owners:")
     owner_counter = 1
     for owner in list_intermediaries_owners:
         print(f'{owner_counter}. {owner[0]} = {(owner[1] * norm_coef * 100):.4f}%')
         owner_counter += 1
-        out_lst.append(f'{owner[0]}:{(owner[1] * norm_coef * 100):.4f}')
+        intermediaries_owners_lst.append(f'{owner[0]}:{(owner[1] * norm_coef * 100):.4f}')
     dec = find_dec(df_f=data, inn=company_inn)
-    print(dec)
+    print('dec',dec)
     print(f"The total amount of final ownership share is equal to {(s * 100 * norm_coef):.6}%")
-    return out_lst, dec
+    return final_owners_lst,intermediaries_owners_lst, dec
 
 
 # get_equity_share(requested_company)
