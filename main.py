@@ -402,7 +402,7 @@ def set_additional_vertex():
     suitable_vertices = suitable_vertices_copy
 
 
-# set_additional_vertex(suitable_vertices)
+
 
 
 def get_vertex_without_RL(company_inn: str) -> str:
@@ -605,6 +605,7 @@ def get_csv():
 
     requested_company = '7728493587'
     set_suitable_vertices(requested_company)
+    set_additional_vertex()
     set_terminality_to_table(requested_company)
     final_owners_lst, parents_lst, dec, childrens, intermediaries_owners_lst \
         = get_equity_share(requested_company)
