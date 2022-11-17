@@ -595,8 +595,32 @@ def find_par(df_f, inn):
         return []
 
 
-requested_company = '7728493587'  # "503802414742" 352806209266 2304071215
-set_suitable_vertices(requested_company)
-set_additional_vertex()
-set_terminality_to_table(requested_company)
-print(get_equity_share(requested_company))
+# requested_company = '7728493587'  # "503802414742" 352806209266 2304071215
+# set_suitable_vertices(requested_company)
+# set_additional_vertex()
+# set_terminality_to_table(requested_company)
+# print(get_equity_share(requested_company))
+
+def get_csv():
+
+    requested_company = '7728493587'
+    set_suitable_vertices(requested_company)
+    set_terminality_to_table(requested_company)
+    final_owners_lst, parents_lst, dec, childrens, intermediaries_owners_lst \
+        = get_equity_share(requested_company)
+    final_owners_lst = [{'inn': el[0], 'ownership_p': el[1], 'name': 'get_name_db(el[0])', 'status': 'ascendents'} for el
+                        in final_owners_lst]
+    parents_lst = [{'inn': el[0], 'ownership_p': el[1], 'name': 'get_name_db(el[0])', 'status': 'parents'} for el in
+                   parents_lst]
+    dec = [{'inn': el[0], 'ownership_p': el[1], 'name': 'get_name_db(el[0])', 'status': 'descendents'} for el in dec]
+    childrens = [{'inn': el[0], 'ownership_p': el[1], 'name': 'get_name_db(el[0])', 'status': 'childrens'} for el in
+                 childrens]
+    intermediaries_owners_lst = [
+        {'inn': el[0], 'ownership_p': el[1], 'name': 'get_name_db(el[0])', 'status': 'intermediaries_owners'}
+        for el in intermediaries_owners_lst]
+    # df = pd.concat([pd.DataFrame(final_owners_lst),pd.DataFrame(parents_lst),pd.DataFrame(dec),
+    #                 pd.DataFrame(childrens),pd.DataFrame(intermediaries_owners_lst)])
+    df=pd.concat([pd.DataFrame(final_owners_lst),pd.DataFrame(childrens)])
+    print()
+
+get_csv()

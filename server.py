@@ -1,90 +1,31 @@
 # import autotime
-import time
 import math
 import time
-# from http.client import HTTPException
-from flaskext.mysql import MySQL
-import pandas as pd
-import numpy as np
-# import gc
-# from numpy import linalg as LA
-# from collections import defaultdict
-from flask import Flask, jsonify, abort, request, make_response, url_for
 # from flask_httpauth import HTTPBasicAuth
 # from pyparsing import unicode
 from collections import defaultdict
 from collections import deque
 
+import numpy as np
+import pandas as pd
+# import gc
+# from numpy import linalg as LA
+# from collections import defaultdict
+from flask import Flask, jsonify, abort, request, make_response
+# from http.client import HTTPException
+from flaskext.mysql import MySQL
+from werkzeug.wrappers import Response
+
+SH_MODE = 1  # only SH nodes are considered final holders
+
+suitable_vertices = dict()
+stack_vertices = []
+used_ancestors = set()
 queue_vertices = deque()
-final_owners = dict()
+# разобраться
 all_vertices_in_components_of_strong_connectivity = []
 T_list = []
 data_core_graph = []
-app = Flask(__name__, static_url_path="")
-mysql = MySQL()
-app.config['MYSQL_DATABASE_USER'] = 'app'
-app.config['MYSQL_DATABASE_PASSWORD'] = 'vPUjBWyxKqThlwB39JQg0To3IugXajMj'
-app.config['MYSQL_DATABASE_DB'] = 'app'
-app.config['MYSQL_DATABASE_HOST'] = 'localhost'
-mysql.init_app(app)
-
-SH_MODE = 1  # only SH nodes are considered final holders
-LEVELS = 20  # this parameter should be equal or exceed the number of "onion layers" in data. 20 is a bit of overkill for safety
-
-
-@app.before_first_request
-def _declare_df():
-    print('Waite 20 secs while server is loading')
-    path = './founder_sort.csv'
-    global data
-    data = pd.read_csv(path, usecols={'founder_inn', 'inn', 'capital_p'},
-                       dtype={'founder_inn': str, 'inn': str, 'capital_p': float})
-
-    # data.shape
-
-    data = data.rename(columns={'founder_inn': 'participant_id',
-                                'inn': 'organisation_inn',
-                                'capital_p': 'equity_share'})
-    data = data[(data['equity_share'] > 0) &  # mb where or loc
-                (data.participant_id != data.organisation_inn)]
-    global data_orig
-    data_orig = data.copy()
-
-    gdata = data.groupby('organisation_inn').sum().reset_index()
-    dict_companies = dict(gdata.values)
-
-    data['equity_share'] = data['equity_share'] / np.array([dict_companies[num] for num in data['organisation_inn']])
-
-    data['super_holder'] = ~pd.Series(data.participant_id).isin(data.organisation_inn)
-    data['super_target'] = ~pd.Series(data.organisation_inn).isin(data.participant_id)
-
-
-def get_serial_number_by_vertice(v):
-    for i in range(len(data_core_graph)):
-        if (data_core_graph.index[i] == v):
-            return data_core_graph['serial_number'][i]
-
-
-def from_edges(edges):
-    # translate list of edges to list of nodes
-
-    class Node:
-        def __init__(self):
-            # root is one of:
-            # None: not yet visited
-            # -1: already processed
-            # non-negative integer: lowlink
-            self.root = None
-            self.successors = []
-
-    nodes = defaultdict(Node)
-    for v, w in edges:
-        nodes[v].successors.append(nodes[w])
-
-    for i, v in nodes.items():  # name the nodes for final output
-        v.id = i
-
-    return nodes.values()
 
 
 def tarjan(V):
@@ -127,6 +68,40 @@ def find_stationary(A):
     return stationary
 
 
+def from_edges(edges):
+    # translate list of edges to list of nodes
+
+    class Node:
+        def __init__(self):
+            # root is one of:
+            # None: not yet visited
+            # -1: already processed
+            # non-negative integer: lowlink
+            self.root = None
+            self.successors = []
+
+    nodes = defaultdict(Node)
+    for v, w in edges:
+        nodes[v].successors.append(nodes[w])
+
+    for i, v in nodes.items():  # name the nodes for final output
+        v.id = i
+
+    return nodes.values()
+
+
+def get_serial_number_by_vertice(v):
+    for i in range(len(data_core_graph)):
+        if (data_core_graph.index[i] == v):
+            return data_core_graph['serial_number'][i]
+
+
+def get_key_by_value(dictionary, value):
+    for k, v in dictionary.items():
+        if v == value:
+            return k
+
+
 def get_vertice_by_serial_number(serial_number):
     return (data_core_graph[data_core_graph['serial_number'] == serial_number].index[0])
 
@@ -155,38 +130,34 @@ def get_A_for_component(component):
     return A_cur_matrix
 
 
-def get_key_by_value(dictionary, value):
-    for k, v in dictionary.items():
-        if v == value:
-            return k
+def declare_df():
+    print('Waite while server is loading')
+    path = '/src/founder_sort.csv'
+    global data
+    data = pd.read_csv(path, usecols={'founder_inn', 'inn', 'capital_p'},
+                       dtype={'founder_inn': str, 'inn': str, 'capital_p': float})
+
+    # data.shape
+
+    data = data.rename(columns={'founder_inn': 'participant_id',
+                                'inn': 'organisation_inn',
+                                'capital_p': 'equity_share'})
+    data = data[(data['equity_share'] > 0) &  # mb where or loc
+                (data.participant_id != data.organisation_inn)]
+    global data_orig
+    data_orig = data.copy()
+
+    gdata = data.groupby('organisation_inn').sum().reset_index()
+    dict_companies = dict(gdata.values)
+
+    data['equity_share'] = data['equity_share'] / np.array([dict_companies[num] for num in data['organisation_inn']])
+
+    data['super_holder'] = ~pd.Series(data.participant_id).isin(data.organisation_inn)
+    data['super_target'] = ~pd.Series(data.organisation_inn).isin(data.participant_id)
+    # return data
 
 
-# предрасчет
-# def dataop():
-#     path = './founder_sort.csv'
-#
-#     data = pd.read_csv(path, usecols={'founder_inn', 'inn', 'capital_p'},
-#                        dtype={'founder_inn': str, 'inn': str, 'capital_p': float})
-#
-#     # data.shape
-#
-#     data = data.rename(columns={"founder_inn": "organisation_inn",
-#                                 'inn': 'participant_id',
-#                                 'capital_p': 'equity_share'})
-#     data = data[(data['equity_share'] > 0) &
-#                 (data.participant_id != data.organisation_inn)]
-#     data.head()
-#     gdata = data.groupby('organisation_inn').sum().reset_index()
-#     dict_companies = dict(gdata.values)
-#     data['equity_share'] = data['equity_share'] / np.array([dict_companies[num] for num in data['organisation_inn']])
-#
-#     data['super_holder'] = ~pd.Series(data.participant_id).isin(data.organisation_inn)
-#     data['super_target'] = ~pd.Series(data.organisation_inn).isin(data.participant_id)
-#
-#     return data
-
-@app.before_first_request
-def warm_up():
+def core_warm_up(LEVELS):
     print('pruning SH and ST nodes of the external layer...')
     rdata = data.loc[(data['super_holder'] == False) & (data['super_target'] == False)]
     edges_left = len(rdata)
@@ -306,11 +277,11 @@ def warm_up():
     print('Server started')
 
 
-# warm_up()
-
-suitable_vertices = dict()
-stack_vertices = []
-used_ancestors = set()
+def create_app():
+    LEVELS = 20  # this parameter should be equal or exceed the number of "onion layers" in data. 20 is a bit of overkill for safety
+    declare_df()
+    core_warm_up(LEVELS=LEVELS)
+    return Flask(__name__)
 
 
 def find_Z_by_company_inn(company_inn):
@@ -455,9 +426,6 @@ def set_terminality_to_table(company_inn: str):
     suitable_vertices = suitable_vertices_copy
 
 
-# set_terminality_to_table(requested_company)
-
-
 def get_vertex_name_by_presence(company_inn: str) -> str:
     if (suitable_vertices.get(company_inn + 'R') == None):
         # if not in the component
@@ -473,17 +441,16 @@ def get_vertex_name_by_presence(company_inn: str) -> str:
 
 status = 0
 
-final_owners = dict()
-intermediaries_owners = dict()
-
 
 def get_equity_share(company_inn: str):
     final_owners_lst = []
     intermediaries_owners_lst = []
     st_time = time.monotonic()
     queue_vertices.clear()
-    final_owners.clear()
-    intermediaries_owners.clear()
+
+    final_owners = dict()
+    intermediaries_owners = dict()
+
     used_vertices = set()
     queue_vertices.append(get_vertex_name_by_presence(company_inn))
     s = 0
@@ -499,8 +466,8 @@ def get_equity_share(company_inn: str):
             if company_inn in data.participant_id.values:
                 print('Found Person')
                 # todo original data
-                #final_owners_lst, parents_lst, dec, childrens, intermediaries_owners_lst
-                return [], [], find_dec(data, company_inn), find_dec(data_orig, company_inn),[]
+                # final_owners_lst, parents_lst, dec, childrens, intermediaries_owners_lst
+                return [], [], find_dec(data, company_inn), find_dec(data_orig, company_inn), []
             else:
                 raise NameError(company_inn)
                 return False
@@ -564,13 +531,13 @@ def get_equity_share(company_inn: str):
     for el in dec:
         el[1] = round(el[1] * 100, 2)
     # new_dec.append((el[0],round( el[1] * norm_coef * 100,2)))
-    #dec1 = find_dec(df_f=data_orig, inn=company_inn)
+    # dec1 = find_dec(df_f=data_orig, inn=company_inn)
     print('dec', dec)
-    #print('dec1 ', dec1)
+    # print('dec1 ', dec1)
     print(f"The total amount of final ownership share is equal to {(s * 100 * norm_coef):.6}%")
-    #return final_owners_lst, intermediaries_owners_lst, dec
+    # return final_owners_lst, intermediaries_owners_lst, dec
     return final_owners_lst, find_par(data_orig, company_inn), dec, \
-           find_dec(data_orig, company_inn),intermediaries_owners_lst
+           find_dec(data_orig, company_inn), intermediaries_owners_lst
 
 
 def find_dec(df_f, inn):
@@ -580,11 +547,13 @@ def find_dec(df_f, inn):
     # inn =503802414742 # 10000246917 5038107129 7606080127
     df = df_f.loc[df_f['participant_id'] == inn]
     df = df.drop_duplicates('organisation_inn')
-    #df.equity_share=df.equity_share.apply(   lambda x:x*100).apply( lambda x: round(x, 2))
+    # df.equity_share=df.equity_share.apply(   lambda x:x*100).apply( lambda x: round(x, 2))
     print(df.head())
     if not df.empty:
-        return list(map(list,zip(df.organisation_inn, df.equity_share)))
-    else: return []
+        return list(map(list, zip(df.organisation_inn, df.equity_share)))
+    else:
+        return []
+
 
 def find_par(df_f, inn):
     columns = ['inn', 'parents']
@@ -593,35 +562,12 @@ def find_par(df_f, inn):
     # inn =503802414742 # 10000246917 5038107129 7606080127
     df = df_f.loc[df_f['organisation_inn'] == inn]
     df = df.drop_duplicates('participant_id')
-    #df.equity_share = df.equity_share.apply(lambda x: x * 100)
-    #print(df.equity_share)
+    # df.equity_share = df.equity_share.apply(lambda x: x * 100)
+    # print(df.equity_share)
     if not df.empty:
-        return  list(map(list,zip(df.participant_id, df.equity_share)))
+        return list(map(list, zip(df.participant_id, df.equity_share)))
     else:
         return []
-
-@app.errorhandler(Exception)
-def bad_request(error):
-    return make_response(jsonify({'error': 'Bad request'}), 400)
-
-
-@app.errorhandler(404)
-def not_found(error):
-    return make_response(jsonify({'error': 'Not found'}), 404)
-
-
-@app.errorhandler(NameError)
-def key_err(error):
-    return make_response(jsonify({'error': f"Could not find the entered company or person {error}"}), 401)
-
-
-@app.route('/status', methods=['GET'])
-def get_stats():
-    global status
-    if status == 0:
-        return {'status': 'nothing todo'}
-    else:
-        return {'status': 'calculating'}
 
 
 def get_name_db(inn):
@@ -633,7 +579,41 @@ def get_name_db(inn):
         return data[0]
 
     except:
-      return ''
+        return ''
+
+
+#
+# @app.route('/todo/api/v1.0/tasks/<int:task_id>', methods=['GET'])
+# # @auth.login_required
+# def get_task(task_id):
+#     task = filter(lambda t: t['id'] == task_id, tasks)
+#     if len(task) == 0:
+#         abort(404)
+#     return jsonify({'task': make_public_task(task[0])})
+#
+#
+# @app.route('/todo/api/v1.0/tasks', methods=['POST'])
+# # @auth.login_required
+# def create_task():
+#     if not request.json or not 'inn' in request.json:
+#         abort(400)
+#     task = {
+#         'id': tasks[-1]['id'] + 1,
+#         'title': request.json['title'],
+#         'description': request.json.get('description', ""),
+#         'done': False
+#     }
+#     tasks.append(task)
+#     return jsonify({'task': make_public_task(task)}), 201
+
+
+app = create_app()
+mysql = MySQL()
+app.config['MYSQL_DATABASE_USER'] = 'app'
+app.config['MYSQL_DATABASE_PASSWORD'] = 'vPUjBWyxKqThlwB39JQg0To3IugXajMj'
+app.config['MYSQL_DATABASE_DB'] = 'app'
+app.config['MYSQL_DATABASE_HOST'] = 'localhost'
+mysql.init_app(app)
 
 
 @app.route('/inn', methods=['POST'])
@@ -692,9 +672,9 @@ def get_corp():
     requested_company = str(inn)
     set_suitable_vertices(requested_company)
     set_terminality_to_table(requested_company)
-    final_owners_lst, parents_lst, dec, childrens,intermediaries_owners_lst\
+    final_owners_lst, parents_lst, dec, childrens, intermediaries_owners_lst \
         = get_equity_share(requested_company)
-    final_owners_lst=[{'inn':el[0],'ownership_p':el[1],'name':get_name_db(el[0])} for el in final_owners_lst]
+    final_owners_lst = [{'inn': el[0], 'ownership_p': el[1], 'name': get_name_db(el[0])} for el in final_owners_lst]
     parents_lst = [{'inn': el[0], 'ownership_p': el[1], 'name': get_name_db(el[0])} for el in parents_lst]
     dec = [{'inn': el[0], 'ownership_p': el[1], 'name': get_name_db(el[0])} for el in dec]
     childrens = [{'inn': el[0], 'ownership_p': el[1], 'name': get_name_db(el[0])} for el in childrens]
@@ -709,30 +689,63 @@ def get_corp():
     )
 
 
-#
-# @app.route('/todo/api/v1.0/tasks/<int:task_id>', methods=['GET'])
-# # @auth.login_required
-# def get_task(task_id):
-#     task = filter(lambda t: t['id'] == task_id, tasks)
-#     if len(task) == 0:
-#         abort(404)
-#     return jsonify({'task': make_public_task(task[0])})
-#
-#
-# @app.route('/todo/api/v1.0/tasks', methods=['POST'])
-# # @auth.login_required
-# def create_task():
-#     if not request.json or not 'inn' in request.json:
-#         abort(400)
-#     task = {
-#         'id': tasks[-1]['id'] + 1,
-#         'title': request.json['title'],
-#         'description': request.json.get('description', ""),
-#         'done': False
-#     }
-#     tasks.append(task)
-#     return jsonify({'task': make_public_task(task)}), 201
+@app.route('/get_csv', methods=['GET'])
+# @auth.login_required
+def get_csv():
+    inn = request.args.get('inn')
+    print(inn)
+    if len(inn) == 0:
+        abort(400)
+
+    requested_company = str(inn)
+    set_suitable_vertices(requested_company)
+    set_terminality_to_table(requested_company)
+    final_owners_lst, parents_lst, dec, childrens, intermediaries_owners_lst \
+        = get_equity_share(requested_company)
+    final_owners_lst = [{'inn': el[0], 'ownership_p': el[1], 'name': get_name_db(el[0]), 'status': 'ascendents'} for el
+                        in final_owners_lst]
+    parents_lst = [{'inn': el[0], 'ownership_p': el[1], 'name': get_name_db(el[0]), 'status': 'parents'} for el in
+                   parents_lst]
+    dec = [{'inn': el[0], 'ownership_p': el[1], 'name': get_name_db(el[0]), 'status': 'descendents'} for el in dec]
+    childrens = [{'inn': el[0], 'ownership_p': el[1], 'name': get_name_db(el[0]), 'status': 'childrens'} for el in
+                 childrens]
+    intermediaries_owners_lst = [
+        {'inn': el[0], 'ownership_p': el[1], 'name': get_name_db(el[0]), 'status': 'intermediaries_owners'}
+        for el in intermediaries_owners_lst]
+    df = pd.concat([pd.DataFrame(final_owners_lst), pd.DataFrame(parents_lst), pd.DataFrame(dec),
+                    pd.DataFrame(childrens), pd.DataFrame(intermediaries_owners_lst)])
+
+    response = Response(df.to_csv(index_label='index'), mimetype='text/csv')
+    # add a filename
+    #response.
+    response.headers.set("Content-Disposition", "attachment", filename=f"{inn}.csv")
+    return response
+
+
+@app.errorhandler(Exception)
+def bad_request(error):
+    return make_response(jsonify({'error': 'Bad request'}), 400)
+
+
+@app.errorhandler(404)
+def not_found(error):
+    return make_response(jsonify({'error': 'Not found'}), 404)
+
+
+@app.errorhandler(NameError)
+def key_err(error):
+    return make_response(jsonify({'error': f"Could not find the entered company or person {error}"}), 401)
+
+
+@app.route('/status', methods=['GET'])
+def get_stats():
+    global status
+    if status == 0:
+        return {'status': 'nothing todo'}
+    else:
+        return {'status': 'calculating'}
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=3000)
+
+    app.run(debug=True, port=3000,use_reloader=False)
