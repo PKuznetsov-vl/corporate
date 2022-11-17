@@ -31,6 +31,7 @@ data = data.rename(columns={'founder_inn': 'participant_id',
 data = data[(data['equity_share'] > 0) &
             (data.participant_id != data.organisation_inn)]
 data.head()
+data_orig=data.copy()
 gdata = data.groupby('organisation_inn').sum().reset_index()
 dict_companies = dict(gdata.values)
 data['equity_share'] = data['equity_share'] / np.array([dict_companies[num] for num in data['organisation_inn']])
@@ -448,7 +449,8 @@ def get_vertex_name_by_presence(company_inn: str) -> str:
 
 
 def get_equity_share(company_inn: str):
-    out_lst = []
+    final_owners_lst = []
+    intermediaries_owners_lst=[]
     st_time = time.monotonic()
     queue_vertices.clear()
     final_owners.clear()
@@ -510,24 +512,33 @@ def get_equity_share(company_inn: str):
     list_intermediaries_owners.reverse()
     owner_counter = 1
     print(f"Ownership share in the company {company_inn}:")
+    print('s',s)
     norm_coef = 1 / s # какой-нибудь try catch при s = 0
     
     print("Final owners:")
     for owner in list_final_owners:
         print(f'{owner_counter}. {owner[0]} = {(owner[1] * norm_coef * 100):.4f}%')
         owner_counter += 1
-        out_lst.append(f'{owner[0]}:{(owner[1] * norm_coef * 100):.4f}')
+        final_owners_lst.append([owner[0],round(owner[1] * norm_coef * 100,2)])
     
     print("Intermediaries owners:")
     owner_counter = 1
     for owner in list_intermediaries_owners:
         print(f'{owner_counter}. {owner[0]} = {(owner[1] * norm_coef * 100):.4f}%')
         owner_counter += 1
-        out_lst.append(f'{owner[0]}:{(owner[1] * norm_coef * 100):.4f}')
+        intermediaries_owners_lst.append([owner[0],round(owner[1] * norm_coef * 100,2)])
     dec = find_dec(df_f=data, inn=company_inn)
-    print(dec)
+    print('dec_old', dec)
+    #new_dec=[]
+    for el  in dec:
+        el[1]= round(el[1]  * 100,2)
+       # new_dec.append((el[0],round( el[1] * norm_coef * 100,2)))
+    dec1 = find_dec(df_f=data_orig, inn=company_inn)
+    print('dec',dec)
+    print('dec1 ', dec1)
     print(f"The total amount of final ownership share is equal to {(s * 100 * norm_coef):.6}%")
-    return out_lst, dec
+    return final_owners_lst, find_par(data_orig, company_inn), dec, \
+           find_dec(data_orig, company_inn), intermediaries_owners_lst
 
 
 # get_equity_share(requested_company)
@@ -556,23 +567,60 @@ def find_dec(df_f, inn):
     # inn =503802414742 # 10000246917 5038107129 7606080127
     df = df_f.loc[df_f['participant_id'] == inn]
     df = df.drop_duplicates('organisation_inn')
-    df.equity_share=df.equity_share.apply(   lambda x:x*100).apply( lambda x: round(x, 2))
-    print(df.equity_share)
+    #df.equity_share=df.equity_share.apply(   lambda x:x*100).apply( lambda x: round(x, 2))
+    print(df.head())
     if not df.empty:
-        # исправить apply
-        df['mg_coll'] = df.loc[:, ('organisation_inn', 'equity_share')].astype(str).apply(':'.join, axis=1)
-
-        df_fin['childrens'] = df.groupby('participant_id').mg_coll.apply(
-            lambda x: ';'.join(list(map(str, x))))
-
-    return df_fin['childrens']._values.tolist()
+        return list(map(list,zip(df.organisation_inn, df.equity_share)))
+    else: return []
 
 
+def find_par(df_f, inn):
+    columns = ['inn', 'parents']
+
+    df_fin = pd.DataFrame(columns=columns)
+    # inn =503802414742 # 10000246917 5038107129 7606080127
+    df = df_f.loc[df_f['organisation_inn'] == inn]
+    df = df.drop_duplicates('participant_id')
+    #df.equity_share = df.equity_share.apply(lambda x: x * 100)
+    #print(df.equity_share)
+    if not df.empty:
+    #     # писправить apply
+    #     df['mg_coll'] = df.loc[:, ('participant_id', 'equity_share')].astype(str).apply(':'.join, axis=1)
+    #
+    #     parents = df.groupby('organisation_inn').mg_coll.apply(
+    #         lambda x: ';'.join(list(map(str, x))))._values.tolist()
+
+        return  list(map(list,zip(df.participant_id, df.equity_share)))
+    else:
+        return []
 
 
+# requested_company = '7728493587'  # "503802414742" 352806209266 2304071215
+# set_suitable_vertices(requested_company)
+# set_additional_vertex()
+# set_terminality_to_table(requested_company)
+# print(get_equity_share(requested_company))
 
-requested_company = '7728493587'  # "503802414742" 352806209266 2304071215
-set_suitable_vertices(requested_company)
-set_additional_vertex()
-set_terminality_to_table(requested_company)
-print(get_equity_share(requested_company))
+def get_csv():
+
+    requested_company = '7728493587'
+    set_suitable_vertices(requested_company)
+    set_terminality_to_table(requested_company)
+    final_owners_lst, parents_lst, dec, childrens, intermediaries_owners_lst \
+        = get_equity_share(requested_company)
+    final_owners_lst = [{'inn': el[0], 'ownership_p': el[1], 'name': 'get_name_db(el[0])', 'status': 'ascendents'} for el
+                        in final_owners_lst]
+    parents_lst = [{'inn': el[0], 'ownership_p': el[1], 'name': 'get_name_db(el[0])', 'status': 'parents'} for el in
+                   parents_lst]
+    dec = [{'inn': el[0], 'ownership_p': el[1], 'name': 'get_name_db(el[0])', 'status': 'descendents'} for el in dec]
+    childrens = [{'inn': el[0], 'ownership_p': el[1], 'name': 'get_name_db(el[0])', 'status': 'childrens'} for el in
+                 childrens]
+    intermediaries_owners_lst = [
+        {'inn': el[0], 'ownership_p': el[1], 'name': 'get_name_db(el[0])', 'status': 'intermediaries_owners'}
+        for el in intermediaries_owners_lst]
+    # df = pd.concat([pd.DataFrame(final_owners_lst),pd.DataFrame(parents_lst),pd.DataFrame(dec),
+    #                 pd.DataFrame(childrens),pd.DataFrame(intermediaries_owners_lst)])
+    df=pd.concat([pd.DataFrame(final_owners_lst),pd.DataFrame(childrens)])
+    print()
+
+get_csv()
