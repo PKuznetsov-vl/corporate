@@ -13,7 +13,7 @@ data_core_graph = []
 
 SH_MODE = 1  # only SH nodes are considered final holders
 LEVELS = 20  # this parameter should be equal or exceed the number of "onion layers" in data. 20 is a bit of overkill for safety
-
+#todo ref that part
 path = './founder_sort.csv'
 
 data = pd.read_csv(path, usecols={'founder_inn', 'inn', 'capital_p'},
