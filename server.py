@@ -396,7 +396,7 @@ def set_additional_vertex():
     suitable_vertices = suitable_vertices_copy
 
 
-# set_additional_vertex(suitable_vertices)
+
 
 
 def get_vertex_without_RL(company_inn: str) -> str:
@@ -671,6 +671,7 @@ def get_corp():
 
     requested_company = str(inn)
     set_suitable_vertices(requested_company)
+    set_additional_vertex()
     set_terminality_to_table(requested_company)
     final_owners_lst, parents_lst, dec, childrens, intermediaries_owners_lst \
         = get_equity_share(requested_company)
@@ -702,6 +703,7 @@ def get_csv():
     set_terminality_to_table(requested_company)
     final_owners_lst, parents_lst, dec, childrens, intermediaries_owners_lst \
         = get_equity_share(requested_company)
+    requested_company_info =  [{'inn': inn, 'ownership_p':'', 'name': get_name_db(inn), 'status': 'requested_inn'}]
     final_owners_lst = [{'inn': el[0], 'ownership_p': el[1], 'name': get_name_db(el[0]), 'status': 'ascendents'} for el
                         in final_owners_lst]
     parents_lst = [{'inn': el[0], 'ownership_p': el[1], 'name': get_name_db(el[0]), 'status': 'parents'} for el in
@@ -712,10 +714,10 @@ def get_csv():
     intermediaries_owners_lst = [
         {'inn': el[0], 'ownership_p': el[1], 'name': get_name_db(el[0]), 'status': 'intermediaries_owners'}
         for el in intermediaries_owners_lst]
-    df = pd.concat([pd.DataFrame(final_owners_lst), pd.DataFrame(parents_lst), pd.DataFrame(dec),
+    df = pd.concat([pd.DataFrame(requested_company_info),pd.DataFrame(final_owners_lst), pd.DataFrame(parents_lst), pd.DataFrame(dec),
                     pd.DataFrame(childrens), pd.DataFrame(intermediaries_owners_lst)])
 
-    response = Response(df.to_csv(index_label='index'), mimetype='text/csv')
+    response = Response(df.to_csv(index=False), mimetype='text/csv')
     # add a filename
     #response.
     response.headers.set("Content-Disposition", "attachment", filename=f"{inn}.csv")
