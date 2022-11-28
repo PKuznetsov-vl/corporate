@@ -13,27 +13,22 @@ data_core_graph = []
 
 SH_MODE = 1  # only SH nodes are considered final holders
 LEVELS = 20  # this parameter should be equal or exceed the number of "onion layers" in data. 20 is a bit of overkill for safety
-#todo ref that part
-path = './founder_sort.csv'
 
-data = pd.read_csv(path, usecols={'founder_inn', 'inn', 'capital_p'},
-                   dtype={'founder_inn': str, 'inn': str, 'capital_p': float})
 
-# data.shape
+# todo ref that part
+def load_data(path):
+    data = pd.read_csv(path, usecols={'founder_inn', 'inn', 'capital_p'},
+                       dtype={'founder_inn': str, 'inn': str, 'capital_p': float})
 
-data = data.rename(columns={'founder_inn': 'participant_id',
-                            'inn': 'organisation_inn',
-                            'capital_p': 'equity_share'})
-data = data[(data['equity_share'] > 0) &
-            (data.participant_id != data.organisation_inn)]
-data.head()
-data_orig = data.copy()
-gdata = data.groupby('organisation_inn').sum().reset_index()
-dict_companies = dict(gdata.values)
-data['equity_share'] = data['equity_share'] / np.array([dict_companies[num] for num in data['organisation_inn']])
+    data = data.rename(columns={'founder_inn': 'participant_id',
+                                'inn': 'organisation_inn',
+                                'capital_p': 'equity_share'})
+    data = data[(data['equity_share'] > 0) &
+                (data.participant_id != data.organisation_inn)]
+    # data.head()
+    data_orig = data.copy()
 
-data['super_holder'] = ~pd.Series(data.participant_id).isin(data.organisation_inn)
-data['super_target'] = ~pd.Series(data.organisation_inn).isin(data.participant_id)
+    return data
 
 
 def get_serial_number_by_vertice(v):
@@ -163,7 +158,7 @@ def get_key_by_value(dictionary, value):
 #     return data
 
 
-def warm_up():
+def warm_up(data):
     print('pruning SH and ST nodes of the external layer...')
     rdata = data.loc[(data['super_holder'] == False) & (data['super_target'] == False)]
     edges_left = len(rdata)
@@ -282,12 +277,6 @@ def warm_up():
             T_list.append([component_vertices, T_current])
 
 
-warm_up()
-additional_graph = data.copy(deep=True)
-additional_graph.rename(columns={'super_holder': 'terminality'}, inplace=True)
-additional_graph = additional_graph.drop(columns=['super_target'], axis=1)
-additional_graph = additional_graph.set_index('organisation_inn')
-
 suitable_vertices = dict()
 stack_vertices = []
 used_ancestors = set()
@@ -300,7 +289,11 @@ def find_Z_by_company_inn(company_inn):
                 return T_list[i], j
 
 
-def set_suitable_vertices(company_inn: str) -> bool:
+def set_suitable_vertices(company_inn: str, data: pd.DataFrame) -> bool:
+    additional_graph = data.copy(deep=True)
+    additional_graph.rename(columns={'super_holder': 'terminality'}, inplace=True)
+    additional_graph = additional_graph.drop(columns=['super_target'], axis=1)
+    additional_graph = additional_graph.set_index('organisation_inn')
     st_time = time.monotonic()
     suitable_vertices.clear()
     stack_vertices.clear()
@@ -441,7 +434,7 @@ def get_vertex_name_by_presence(company_inn: str) -> str:
         return company_inn + 'R'
 
 
-def get_equity_share(company_inn: str):
+def get_equity_share(company_inn: str, data: pd.DataFrame, data_orig: pd.DataFrame):
     intermediaries_owners = dict()
     queue_vertices = deque()
     final_owners = dict()
@@ -523,15 +516,16 @@ def get_equity_share(company_inn: str):
         owner_counter += 1
         intermediaries_owners_lst.append([owner[0], round(owner[1] * norm_coef * 100, 2)])
     dec = find_dec(df_f=data, inn=company_inn)
-    print('dec_old', dec)
-    # new_dec=[]
+
     for el in dec:
         el[1] = round(el[1] * 100, 2)
     # new_dec.append((el[0],round( el[1] * norm_coef * 100,2)))
     dec1 = find_dec(df_f=data_orig, inn=company_inn)
-    print('dec', dec)
-    print('dec1 ', dec1)
+
     print(f"The total amount of final ownership share is equal to {(s * 100 * norm_coef):.6}%")
+    print('parents', find_par(data_orig, company_inn))
+    print('dec', dec)
+    print('childrens ', dec1)
     return final_owners_lst, find_par(data_orig, company_inn), dec, \
            find_dec(data_orig, company_inn), intermediaries_owners_lst
 
@@ -539,7 +533,6 @@ def get_equity_share(company_inn: str):
 def find_dec(df_f, inn):
     columns = ['inn', 'childrens']
 
-    df_fin = pd.DataFrame(columns=columns)
     # inn =503802414742 # 10000246917 5038107129 7606080127
     df = df_f.loc[df_f['participant_id'] == inn]
     df = df.drop_duplicates('organisation_inn')
@@ -554,12 +547,12 @@ def find_dec(df_f, inn):
 def find_par(df_f, inn):
     columns = ['inn', 'parents']
 
-    df_fin = pd.DataFrame(columns=columns)
     # inn =503802414742 # 10000246917 5038107129 7606080127
     df = df_f.loc[df_f['organisation_inn'] == inn]
     df = df.drop_duplicates('participant_id')
 
     if not df.empty:
+        print(df.head())
         return list(map(list, zip(df.participant_id, df.equity_share)))
     else:
         return []
@@ -648,21 +641,43 @@ def get_equity_share_old(company_inn: str) -> bool:
 
 
 def without_terminal_owners():
-    #старая версия алгоритма
+    # старая версия алгоритма
+    path = './founder_sort.csv'
+    data = load_data(path)
+    data_orig = data.copy()
+    dict_companies = dict(data.groupby('organisation_inn').sum().reset_index().values)
+    data['equity_share'] = data['equity_share'] / np.array([dict_companies[num] for num in data['organisation_inn']])
+
+    data['super_holder'] = ~pd.Series(data.participant_id).isin(data.organisation_inn)
+    data['super_target'] = ~pd.Series(data.organisation_inn).isin(data.participant_id)
+
+    warm_up(data=data)
+
     requested_company = '9728040365'  # "503802414742" 352806209266 2304071215
-    set_suitable_vertices(requested_company)
+    set_suitable_vertices(company_inn=requested_company, data=data)
     set_additional_vertex()
-    set_terminality_to_table(requested_company)
+    set_terminality_to_table(company_inn=requested_company)
     get_equity_share_old(requested_company)
 
 
 def with_terminal_owners():
-    # старая версия алгоритма
+    path = './founder_sort.csv'
+    data = load_data(path)
+    data_orig = data.copy()
+    dict_companies = dict(data.groupby('organisation_inn').sum().reset_index().values)
+    data['equity_share'] = data['equity_share'] / np.array([dict_companies[num] for num in data['organisation_inn']])
+    data['super_holder'] = ~pd.Series(data.participant_id).isin(data.organisation_inn)
+    data['super_target'] = ~pd.Series(data.organisation_inn).isin(data.participant_id)
+
+    warm_up(data=data)
+
     requested_company = '9728040365'  # "503802414742" 352806209266 2304071215
-    set_suitable_vertices(requested_company)
+    set_suitable_vertices(company_inn=requested_company, data=data)
     set_additional_vertex()
-    set_terminality_to_table(requested_company)
-    print(get_equity_share(requested_company))
+    set_terminality_to_table(company_inn=requested_company)
+    get_equity_share(company_inn=requested_company, data=data, data_orig=data_orig)
+
+
 if __name__ == '__main__':
     with_terminal_owners()
-    without_terminal_owners()
+# without_terminal_owners()
