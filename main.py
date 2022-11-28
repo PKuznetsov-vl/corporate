@@ -679,5 +679,12 @@ def with_terminal_owners():
 
 
 if __name__ == '__main__':
+    import objgraph
+
+    roots= objgraph.get_leaking_objects()
+    print('Num of memory leaking objs',len(roots) ) #pizdec todo decrease size
+    #print(' memory leaking objs', roots)
+    print(objgraph.show_growth() )
+    objgraph.show_refs(roots[:3], refcounts=True, filename='roots.png')
     with_terminal_owners()
 # without_terminal_owners()
