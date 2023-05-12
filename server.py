@@ -131,8 +131,8 @@ def get_A_for_component(component):
 
 
 def declare_df():
-    print('Waite while server is loading')
-    path = './founder_sort.csv'
+    print('Wait while server is loading')
+    path = '/Users/pavel/PycharmProjects/corporate/founder_sort.csv'
     global data
     data = pd.read_csv(path, usecols={'founder_inn', 'inn', 'capital_p'},
                        dtype={'founder_inn': str, 'inn': str, 'capital_p': float})
